@@ -1,2 +1,9 @@
-inquirer
-docker
+docker==7.0.0
+inquirer==3.2.4
+PyInquirer==1.0.3
+colorama>=0.4.6
+python-dotenv>=1.0.0
+typing-extensions>=4.9.0
+pytest>=8.0.0
+black>=24.2.0
+flake8>=7.0.0
