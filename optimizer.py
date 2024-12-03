@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-# Import required libraries
 import docker
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 import sys
 import inquirer
 from inquirer import themes
@@ -11,6 +10,8 @@ import platform
 import re
 import time
 import signal
+from image_analyzer import ImageAnalyzer
+from progress_reporter import ProgressReporter
 
 class DockerAnalyzer:
     """Main class for analyzing Docker images and containers"""
@@ -128,6 +129,109 @@ class DockerAnalyzer:
         """Cleanup when the analyzer is destroyed"""
         if hasattr(self, 'container_manager'):
             self.container_manager.cleanup()
+
+    def analyze_image(self, image_name: str) -> Dict:
+        """Comprehensive analysis of a Docker image"""
+        progress = ProgressReporter()
+        progress.start_analysis(5)  # We have 5 main analysis steps
+
+        # Step 1: Layer Analysis
+        progress.next_step("Analyzing image layers")
+        analyzer = ImageAnalyzer(self.client)
+        layer_info = analyzer.analyze_layers(image_name)
+        
+        # Step 2: Filesystem Analysis
+        progress.next_step("Analyzing filesystem")
+        filesystem_info = self.get_image_filesystem(image_name)
+        
+        # Step 3: Usage Analysis
+        progress.next_step("Analyzing file usage")
+        unused_files = self.get_unused_files(image_name)
+        
+        # Step 4: Security Scan
+        progress.next_step("Performing security scan")
+        security_info = self.scan_security(image_name)
+        
+        # New step: File access tracking
+        progress.next_step("Tracking file access patterns")
+        container = self.container_manager.ensure_container_exists(image_name)
+        if container:
+            file_access = self.track_file_access(container)
+        else:
+            file_access = {}
+        
+        progress.finish()
+        
+        return {
+            'layer_analysis': layer_info,
+            'filesystem': filesystem_info,
+            'unused_files': unused_files,
+            'security': security_info,
+            'file_access': file_access
+        }
+
+    def scan_security(self, image_name: str) -> Dict:
+        """Basic security scan of the image"""
+        results = {
+            'root_processes': [],
+            'exposed_ports': [],
+            'environment_vars': [],
+            'privileged_capabilities': []
+        }
+        
+        try:
+            image = self.client.images.get(image_name)
+            config = image.attrs['Config']
+            
+            # Check exposed ports
+            if config.get('ExposedPorts'):
+                results['exposed_ports'] = list(config['ExposedPorts'].keys())
+                
+            # Check environment variables
+            if config.get('Env'):
+                results['environment_vars'] = [
+                    env for env in config['Env'] 
+                    if not any(secret in env.lower() 
+                              for secret in ['password', 'key', 'token', 'secret'])
+                ]
+                
+            # Check for root processes
+            container = self.container_manager.ensure_container_exists(image_name)
+            if container:
+                ps_cmd = container.exec_run('ps aux')
+                if ps_cmd.exit_code == 0:
+                    processes = ps_cmd.output.decode('utf-8').split('\n')
+                    results['root_processes'] = [
+                        p for p in processes if p.startswith('root')
+                    ]
+                    
+            return results
+        except Exception as e:
+            return {'error': str(e)}
+
+    def track_file_access(self, container) -> Dict[str, Set[str]]:
+        """Track file access using Docker's native diff feature"""
+        try:
+            # Get initial state
+            time.sleep(1)
+            initial_diff = container.diff()
+            initial_files = {change['Path'] for change in initial_diff}
+            
+            # Wait and get final state
+            time.sleep(10)
+            final_diff = container.diff()
+            final_files = {change['Path'] for change in final_diff}
+            
+            # Calculate accessed files
+            accessed_files = final_files - initial_files
+            
+            return {
+                'files': accessed_files,
+                'total_accessed': len(accessed_files)
+            }
+        except Exception as e:
+            print(f"Error tracking file access: {e}")
+            return {'files': set(), 'total_accessed': 0}
 
 def get_container_pid(container_id: str) -> Optional[str]:
     """Get the main process ID (PID) of a Docker container."""
@@ -272,6 +376,28 @@ def analyze_container_files(container) -> set:
     except:
         return set()
 
+def display_analysis_results(analysis: Dict):
+    """Display formatted analysis results"""
+    print("\n📊 Analysis Results")
+    print("=================")
+    
+    if analysis.get('layer_analysis'):
+        print("\n🔍 Layer Analysis:")
+        print(f"  • Total layers: {analysis['layer_analysis']['total_layers']}")
+        print(f"  • Total size: {analysis['layer_analysis']['total_size']}")
+        
+    if analysis.get('unused_files'):
+        print("\n📁 File Usage:")
+        print(f"  • Total files: {analysis['unused_files']['all_files']}")
+        print(f"  • Used files: {analysis['unused_files']['used_files']}")
+        print(f"  • Unused files: {analysis['unused_files']['total_unused']}")
+        
+    if analysis.get('security'):
+        print("\n🔒 Security Scan:")
+        print(f"  • Exposed ports: {len(analysis['security']['exposed_ports'])}")
+        print(f"  • Root processes: {len(analysis['security']['root_processes'])}")
+        print(f"  • Environment variables: {len(analysis['security']['environment_vars'])}")
+
 def main():
     """Main function to run the Docker Image Analyzer"""
     print("\n🔍 Docker Image Analyzer")
@@ -305,22 +431,10 @@ def main():
         
         # Initialize analyzer and create container
         analyzer = DockerAnalyzer()
-        container = analyzer.container_manager.ensure_container_exists(selected_image)
-        if not container:
-            print("Failed to create/get container")
-            return
-            
-        # Analyze container files
-        used_files = analyze_container_files(container)
         
-        # Display results
-        if used_files:
-            print("\nFiles being used by the container:")
-            for file in sorted(used_files):
-                print(file)
-            print(f"\nTotal files in use: {len(used_files)}")
-        else:
-            print("No files were found in use")
+        # Run analysis and display results
+        analysis = analyzer.analyze_image(selected_image)
+        display_analysis_results(analysis)
             
     except KeyboardInterrupt:
         print("\nAnalysis cancelled by user")
