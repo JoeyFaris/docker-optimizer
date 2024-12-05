@@ -18,7 +18,13 @@ class SecurityScanner:
             
             # Check exposed ports
             if config.get('ExposedPorts'):
-                results['exposed_ports'] = list(config['ExposedPorts'].keys())
+                # Convert port mappings to more readable format
+                ports = []
+                for port in config['ExposedPorts'].keys():
+                    # Split port/protocol (e.g., "80/tcp" -> "80 (TCP)")
+                    port_num, proto = port.split('/')
+                    ports.append(f"{port_num} ({proto.upper()})")
+                results['exposed_ports'] = ports
                 
             # Check environment variables
             if config.get('Env'):

@@ -6,6 +6,10 @@ def format_size(size_bytes: int) -> str:
         size_bytes /= 1024
     return f"{size_bytes:.1f}PB"
 
+def format_number(num: int) -> str:
+    """Format number with thousands separator"""
+    return f"{num:,}"
+
 def display_analysis_results(analysis: dict):
     """Display formatted analysis results"""
     print("\n📊 Analysis Results")
@@ -15,20 +19,19 @@ def display_analysis_results(analysis: dict):
         print("\n🔍 Layer Analysis:")
         print(f"  • Total layers: {analysis['layer_analysis']['total_layers']}")
         print(f"  • Total size: {analysis['layer_analysis']['total_size']}")
-        if analysis.get('unused_files') and analysis['unused_files'].get('unused_size'):
-            unused_size = analysis['unused_files']['unused_size']
-            print(f"  • Unused size: {format_size(unused_size)}")
         
-    if analysis.get('unused_files'):
-        print("\n📁 File Usage:")
-        total_size = analysis['unused_files'].get('total_size', 0)
-        unused_size = analysis['unused_files'].get('unused_size', 0)
-        print(f"  • Total files: {analysis['unused_files']['all_files']} ({format_size(total_size)})")
-        print(f"  • Used files: {analysis['unused_files']['used_files']}")
-        print(f"  • Unused files: {analysis['unused_files']['total_unused']} ({format_size(unused_size)})")
-        
+        if analysis.get('unused_files'):
+            total_files = analysis['unused_files']['all_files']
+            used_files = analysis['unused_files']['used_files']
+            unused_size = analysis['unused_files'].get('unused_size', 0)
+            
+            print(f"  • Files: {format_number(used_files)}/{format_number(total_files)} in use ({format_size(unused_size)} unused)")
+    
     if analysis.get('security'):
-        print("\n🔒 Security Scan:")
-        print(f"  • Exposed ports: {len(analysis['security']['exposed_ports'])}")
+        print("\n🔒 Security:")
+        exposed_ports = analysis['security']['exposed_ports']
+        ports_str = f"{len(exposed_ports)} ({', '.join(exposed_ports)})" if exposed_ports else "0"
+        
+        print(f"  • Exposed ports: {ports_str}")
         print(f"  • Root processes: {len(analysis['security']['root_processes'])}")
-        print(f"  • Environment variables: {len(analysis['security']['environment_vars'])}") 
+        print(f"  • Environment vars: {len(analysis['security']['environment_vars'])}")

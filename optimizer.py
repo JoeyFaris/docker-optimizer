@@ -58,7 +58,7 @@ class DockerAnalyzer:
         
         return {
             'layer_analysis': layer_info,
-            'filesystem': filesystem_info,
+            'unused_files': filesystem_info,
             'security': security_info,
             'file_access': file_access
         }
@@ -68,13 +68,15 @@ class DockerAnalyzer:
         try:
             all_files_with_size = fs_analyzer.get_all_files_with_size()
             if not all_files_with_size:
+                print("Warning: No files found in container")
                 return None
                 
             all_files = {path for path, _ in all_files_with_size}
-            used_files = set()
-            used_files.update(fs_analyzer.get_lsof_files())
-            used_files.update(fs_analyzer.get_proc_files())
             
+            # Get used files using the comprehensive method
+            used_files = fs_analyzer.get_all_used_files()
+            
+            # Filter and calculate unused files
             unused_files = {
                 (path, size) for path, size in all_files_with_size 
                 if path and not fs_analyzer.is_system_path(path) and path not in used_files
@@ -83,7 +85,7 @@ class DockerAnalyzer:
             total_size = sum(size for _, size in all_files_with_size)
             unused_size = sum(size for _, size in unused_files)
             
-            return {
+            result = {
                 'all_files': len(all_files),
                 'total_size': total_size,
                 'used_files': len(used_files),
@@ -91,6 +93,13 @@ class DockerAnalyzer:
                 'total_unused': len(unused_files),
                 'unused_size': unused_size
             }
+            
+            # Debug output
+            print(f"Debug: Found {len(all_files)} total files")
+            print(f"Debug: Found {len(used_files)} used files")
+            print(f"Debug: Found {len(unused_files)} unused files")
+            
+            return result
         except Exception as e:
             print(f"Error analyzing filesystem: {e}")
             return None
