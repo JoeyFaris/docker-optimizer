@@ -10,7 +10,7 @@ def format_number(num: int) -> str:
     """Format number with thousands separator"""
     return f"{num:,}"
 
-def display_analysis_results(analysis: dict):
+def display_analysis_results(analysis: Dict):
     """Display formatted analysis results"""
     print("\n📊 Analysis Results")
     print("=================")
@@ -35,3 +35,12 @@ def display_analysis_results(analysis: dict):
         print(f"  • Exposed ports: {ports_str}")
         print(f"  • Root processes: {len(analysis['security']['root_processes'])}")
         print(f"  • Environment vars: {len(analysis['security']['environment_vars'])}")
+    
+    if 'optimization_suggestions' in analysis:
+        print("\n📊 Optimization Suggestions:")
+        print("---------------------------")
+        for suggestion in sorted(analysis['optimization_suggestions'], 
+                               key=lambda x: x.priority):
+            print(f"\n🔹 {suggestion.category} (Priority: {suggestion.priority})")
+            print(f"   {suggestion.description}")
+            print(f"   Potential savings: {_format_size(suggestion.potential_savings)}")
