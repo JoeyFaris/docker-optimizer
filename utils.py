@@ -1,10 +1,14 @@
-def format_size(size_bytes: int) -> str:
+from typing import Dict
+import json
+import jinja2
+
+def format_size(size_bytes: float) -> str:
     """Convert bytes to human readable format"""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if size_bytes < 1024:
-            return f"{size_bytes:.1f}{unit}"
+            return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024
-    return f"{size_bytes:.1f}PB"
+    return f"{size_bytes:.2f} PB"
 
 def format_number(num: int) -> str:
     """Format number with thousands separator"""

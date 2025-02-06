@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 import docker
+from concurrent.futures import ThreadPoolExecutor
 
 class ImageAnalyzer:
     def __init__(self, client: docker.DockerClient):
@@ -9,17 +10,14 @@ class ImageAnalyzer:
         """Analyze Docker image layers and their sizes"""
         try:
             image = self.client.images.get(image_name)
-            layers = []
-            total_size = 0
+            with ThreadPoolExecutor() as executor:
+                layer_futures = [
+                    executor.submit(self._analyze_layer, layer)
+                    for layer in image.history()
+                ]
+                layers = [f.result() for f in layer_futures if f.result()['Size'] > 0]
             
-            for layer in image.history():
-                if layer['Size'] > 0:  # Skip empty layers
-                    layers.append({
-                        'created_by': layer.get('CreatedBy', 'unknown'),
-                        'size': self._format_size(layer['Size']),
-                        'raw_size': layer['Size']
-                    })
-                    total_size += layer['Size']
+            total_size = sum(layer['raw_size'] for layer in layers)
             
             return {
                 'layers': layers,
@@ -43,3 +41,12 @@ class ImageAnalyzer:
                 return f"{size_bytes:.2f}{unit}"
             size_bytes /= 1024
         return f"{size_bytes:.2f}TB"
+
+    def _analyze_layer(self, layer):
+        if layer['Size'] > 0:  # Skip empty layers
+            return {
+                'created_by': layer.get('CreatedBy', 'unknown'),
+                'size': self._format_size(layer['Size']),
+                'raw_size': layer['Size']
+            }
+        return None

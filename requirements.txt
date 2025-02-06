@@ -9,3 +9,6 @@ black>=24.2.0
 flake8>=7.0.0
 rich>=13.7.0
 psutil>=5.9.8
+tqdm
+pyyaml
+jinja2

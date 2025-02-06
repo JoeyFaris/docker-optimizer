@@ -13,6 +13,8 @@ from utils import display_analysis_results
 from file_access_tracker import FileAccessTracker
 from dataclasses import dataclass
 import os
+from functools import lru_cache
+import hashlib
 
 @dataclass
 class OptimizationSuggestion:
@@ -24,18 +26,30 @@ class OptimizationSuggestion:
 class DockerAnalyzer:
     """Main class for analyzing Docker images and containers"""
     def __init__(self):
-        # Try to connect to Docker daemon
         try:
             self.client = docker.from_client()
         except:
             try:
                 self.client = docker.from_env()
             except docker.errors.DockerException as e:
+                print("❌ Error: Could not connect to Docker daemon")
+                print(f"Error details: {e}")
                 sys.exit(1)
         self.container_manager = ContainerManager(self.client)
         
+    @lru_cache(maxsize=32)
+    def _get_image_hash(self, image_name: str) -> str:
+        image = self.client.images.get(image_name)
+        return image.id
+
     def analyze_image(self, image_name: str) -> Dict:
-        """Comprehensive analysis of a Docker image"""
+        image_hash = self._get_image_hash(image_name)
+        cache_key = f"analysis_{image_hash}"
+        
+        # Check if we have cached results
+        if hasattr(self, '_cache') and cache_key in self._cache:
+            return self._cache[cache_key]
+        
         progress = ProgressReporter()
         progress.start_analysis(5)
 
@@ -69,13 +83,18 @@ class DockerAnalyzer:
         
         progress.finish()
         
-        return {
+        result = {
             'layer_analysis': layer_info,
             'unused_files': filesystem_info,
             'security': security_info,
             'file_access': file_access,
             'optimization_suggestions': optimization_suggestions
         }
+        
+        # Cache the result
+        self._cache[cache_key] = result
+        
+        return result
 
     def _analyze_filesystem(self, fs_analyzer: FilesystemAnalyzer) -> Optional[Dict]:
         """Analyze filesystem and calculate usage"""
